@@ -232,8 +232,12 @@ describe("MCP Apps ticket card", () => {
         ticketId: "ticket-1",
       });
 
-      const payload = JSON.parse(result.content[0].text);
-      expect(payload.ticketId).toBe("ticket-1"); // model-visible JSON unchanged
+      // content is a human-readable summary, not a JSON dump.
+      expect(() => JSON.parse(result.content[0].text)).toThrow();
+      expect(result.content[0].text).toContain("Server offline");
+
+      const payload = result.structuredContent as Record<string, unknown>;
+      expect(payload.ticketId).toBe("ticket-1"); // model-visible payload unchanged
       expect(payload._card).toMatchObject({
         ticketId: "ticket-1",
         subject: "Server offline",
@@ -253,9 +257,27 @@ describe("MCP Apps ticket card", () => {
       });
 
       expect(result.isError).toBeUndefined();
-      const payload = JSON.parse(result.content[0].text);
+      const payload = result.structuredContent as Record<string, unknown>;
       expect(payload.ticketId).toBe("ticket-2");
       expect(payload._card).toBeUndefined();
+    });
+  });
+
+  describe("server capability declaration (SEP-1865)", () => {
+    it("declares io.modelcontextprotocol/ui in the server capabilities", async () => {
+      const { createMcpServer } = await import("./mcp-server.js");
+      const server = createMcpServer();
+      const caps = (
+        server as unknown as {
+          _capabilities: {
+            extensions?: Record<string, { mimeTypes?: string[] }>;
+          };
+        }
+      )._capabilities;
+      expect(caps.extensions?.["io.modelcontextprotocol/ui"]).toBeDefined();
+      expect(
+        caps.extensions?.["io.modelcontextprotocol/ui"]?.mimeTypes
+      ).toContain(MCP_APP_RESOURCE_MIME);
     });
   });
 });

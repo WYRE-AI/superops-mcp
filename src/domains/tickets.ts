@@ -609,13 +609,14 @@ export function getTicketsTools(): DomainTools {
             const card = buildTicketCard(payload);
             if (card) payload._card = card;
 
+            const ticket = response.getTicket;
+            const summary = `Ticket ${ticket.ticketId ?? ticketId} (${
+              ticket.status ?? "unknown status"
+            }): ${ticket.subject ?? "no subject"}`;
+
             return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(payload, null, 2),
-                },
-              ],
+              content: [{ type: "text", text: summary }],
+              structuredContent: payload,
             };
           }
 

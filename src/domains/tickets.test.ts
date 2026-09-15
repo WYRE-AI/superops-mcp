@@ -394,7 +394,7 @@ describe("Tickets Domain", () => {
         ticketId: "ticket-123",
       });
 
-      const payload = JSON.parse(result.content[0].text as string) as {
+      const payload = result.structuredContent as {
         _card?: { ticketId?: string };
       };
       expect(payload._card?.ticketId).toBe("ticket-123");

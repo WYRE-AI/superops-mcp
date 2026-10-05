@@ -270,5 +270,9 @@ export interface DomainTools {
   handleCall: (
     name: string,
     args: Record<string, unknown>
-  ) => Promise<{ content: { type: string; text: string }[]; isError?: boolean }>;
+  ) => Promise<{
+    content: { type: string; text: string }[];
+    structuredContent?: Record<string, unknown>;
+    isError?: boolean;
+  }>;
 }

@@ -21,6 +21,12 @@ spec:
     - key: NODE_ENV
       value: "production"
       scope: RUN_TIME
+    - key: AUTH_MODE
+      value: "env"
+      scope: RUN_TIME
+    - key: CONDUIT_S2S_SECRET
+      type: SECRET
+      scope: RUN_TIME
     - key: SUPEROPS_API_TOKEN
       type: SECRET
       scope: RUN_AND_BUILD_TIME

@@ -34,12 +34,18 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
+# Bind every interface inside the container. Host publish is loopback in
+# docker-compose. Startup still refuses to run without a real
+# CONDUIT_S2S_SECRET (empty values and known placeholders exit). A wider
+# bind is honored only when that secret is set. AUTH_MODE=gateway never
+# falls back to image env credentials; the insecure-dev bypass is not for
+# this image because it only binds 127.0.0.1.
 ENV NODE_ENV=production
 ENV LOG_LEVEL=info
 ENV MCP_TRANSPORT=http
 ENV MCP_HTTP_PORT=8080
 ENV MCP_HTTP_HOST=0.0.0.0
-ENV AUTH_MODE=env
+ENV AUTH_MODE=gateway
 
 VOLUME ["/app/logs"]
 CMD ["node", "dist/index.js"]

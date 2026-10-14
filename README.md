@@ -48,13 +48,51 @@ npm install @wyre-ai/superops-mcp
 
 ## Configuration
 
-Set the following environment variables:
+Copy [`.env.example`](.env.example) and set the variables below. Leave `CONDUIT_S2S_SECRET` empty in that example; generate a real value with `openssl rand -hex 32` and do not commit it.
 
 ```bash
 export SUPEROPS_API_TOKEN="your-api-token"
 export SUPEROPS_SUBDOMAIN="yourcompany"
 export SUPEROPS_REGION="us"  # or "eu" for EU region
 ```
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `SUPEROPS_API_TOKEN` | For stdio and `AUTH_MODE=env` | SuperOps.ai API token |
+| `SUPEROPS_SUBDOMAIN` | For stdio and `AUTH_MODE=env` | SuperOps.ai subdomain |
+| `SUPEROPS_REGION` | No | `us` (default) or `eu` |
+| `MCP_TRANSPORT` | No | `stdio` (default) or `http` |
+| `AUTH_MODE` | No | `env` (default outside Docker) or `gateway`. The image and Compose default to `gateway`. Gateway mode requires `X-SuperOps-API-Token` and `X-SuperOps-Subdomain` on each `/mcp` request and never falls back to `SUPEROPS_*`. |
+| `CONDUIT_S2S_SECRET` | Yes for HTTP | HMAC secret for `X-Gateway-S2S`. Empty values and known placeholders (`replace-with-a-real-secret`, `your-s2s-secret`, `changeme`, and similar) log an error and exit non-zero. Compose will not start when it is unset. The value is never logged. |
+| `MCP_ALLOW_INSECURE_DEV` | No | Set to `1` only for local development to start HTTP without `CONDUIT_S2S_SECRET`. Logs a warning, does not enforce `X-Gateway-S2S`, and binds `127.0.0.1` only. A non-loopback `MCP_HTTP_HOST` refuses to start. A known placeholder secret is refused even when this flag is set. |
+| `MCP_HTTP_HOST` | No | Bind address when a real `CONDUIT_S2S_SECRET` is set. Defaults to `127.0.0.1`. The container image sets `0.0.0.0`. |
+| `MCP_HTTP_PORT` | No | HTTP port. Defaults to `8080`. |
+
+`/health` stays unauthenticated and does not read credentials. The stdio transport does not use `CONDUIT_S2S_SECRET`.
+
+### HTTP authentication
+
+With `MCP_TRANSPORT=http`, every `/mcp` request must include `X-Gateway-S2S` once `CONDUIT_S2S_SECRET` is set. The header value is `t=<unix seconds>,v1=<hex>`, where the hex is HMAC-SHA256 of the literal string `t=<unix seconds>` keyed with `CONDUIT_S2S_SECRET` (64 lowercase hex characters). The timestamp must be within 300 seconds of the server clock. A missing or invalid header is HTTP 401, before vendor credentials are read.
+
+```bash
+TS=$(date +%s)
+SIG=$(printf 't=%s' "$TS" | openssl dgst -sha256 -hmac "$CONDUIT_S2S_SECRET" -hex | awk '{print $NF}')
+curl -sS http://127.0.0.1:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "X-Gateway-S2S: t=${TS},v1=${SIG}" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+In `AUTH_MODE=gateway`, add `X-SuperOps-API-Token` and `X-SuperOps-Subdomain` as well. Missing credential headers are HTTP 401 and do not fall back to `SUPEROPS_*` in the environment. With `AUTH_MODE=env`, the signed request uses those variables from the process environment.
+
+Standalone local use that cannot sign requests:
+
+```bash
+MCP_TRANSPORT=http MCP_ALLOW_INSECURE_DEV=1 npm start
+```
+
+Startup logs a warning, skips the S2S check, and binds `127.0.0.1` only. Do not publish that port off loopback.
 
 ### Getting Your API Token
 
@@ -139,6 +177,38 @@ User: Show open high priority tickets
 Claude: [calls superops_tickets_list with status: ["Open"], priority: ["High"]]
 Here are the open high priority tickets...
 ```
+
+## Docker
+
+The image listens on `0.0.0.0` inside the container (`MCP_HTTP_HOST`), defaults to `AUTH_MODE=gateway`, and refuses to start unless `CONDUIT_S2S_SECRET` is a real secret. Publish the port on loopback. In gateway mode, SuperOps credentials arrive on each request as headers; they are not read from the environment.
+
+```bash
+docker build -t superops-mcp .
+docker run \
+  -e CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" \
+  -p 127.0.0.1:8080:8080 \
+  superops-mcp
+```
+
+Compose refuses to start when `CONDUIT_S2S_SECRET` is unset, sets `AUTH_MODE=gateway`, publishes `127.0.0.1:8080:8080`, and does not pass `SUPEROPS_API_TOKEN` or `SUPEROPS_SUBDOMAIN` into the container:
+
+```bash
+CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" docker compose up
+```
+
+Sign `/mcp` the same way as in [HTTP authentication](#http-authentication). A gateway-mode call also sends the vendor headers:
+
+```bash
+curl -sS http://127.0.0.1:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "X-Gateway-S2S: t=${TS},v1=${SIG}" \
+  -H "X-SuperOps-API-Token: $SUPEROPS_API_TOKEN" \
+  -H "X-SuperOps-Subdomain: $SUPEROPS_SUBDOMAIN" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+Single-tenant HTTP (`AUTH_MODE=env`) still requires the S2S secret, then uses `SUPEROPS_API_TOKEN` and `SUPEROPS_SUBDOMAIN`. The DigitalOcean one-click template is that mode: set `CONDUIT_S2S_SECRET` as a runtime secret.
 
 ## Rate Limits
 

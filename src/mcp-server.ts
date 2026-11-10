@@ -18,7 +18,22 @@ import {
 
 import type { Domain, DomainTools, ToolDefinition } from "./types.js";
 import { getCredentials, getClient } from "./client.js";
+import { scrubSecrets, truncate } from "./http-error.js";
 import { registerResourceHandlers } from "./resources.js";
+
+/** Only error text is logged; arguments, headers and credential objects never are. */
+function logToolFailure(tool: string, message: string): string {
+  const creds = getCredentials();
+  const sensitiveValues = creds ? [creds.apiToken, creds.subdomain] : [];
+  const safeMessage = scrubSecrets(message, sensitiveValues);
+  console.log(JSON.stringify({
+    level: "error",
+    message: "Tool execution failed",
+    tool: scrubSecrets(tool, sensitiveValues),
+    error: truncate(safeMessage, 1200),
+  }));
+  return safeMessage;
+}
 
 /**
  * Smallest possible authenticated round-trip, used by superops_test_connection.
@@ -285,7 +300,7 @@ export function createMcpServer(): Server {
           ],
         };
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = logToolFailure(name, error instanceof Error ? error.message : String(error));
         return {
           content: [
             {
@@ -370,25 +385,18 @@ export function createMcpServer(): Server {
     // Route to appropriate domain handler based on tool name prefix
     const toolArgs = (args ?? {}) as Record<string, unknown>;
 
-    if (name.startsWith("superops_clients_")) {
-      const domainTools = await loadDomain("clients");
-      return domainTools.handleCall(name, toolArgs);
-    }
-    if (name.startsWith("superops_tickets_")) {
-      const domainTools = await loadDomain("tickets");
-      return domainTools.handleCall(name, toolArgs);
-    }
-    if (name.startsWith("superops_assets_")) {
-      const domainTools = await loadDomain("assets");
-      return domainTools.handleCall(name, toolArgs);
-    }
-    if (name.startsWith("superops_technicians_")) {
-      const domainTools = await loadDomain("technicians");
-      return domainTools.handleCall(name, toolArgs);
-    }
-    if (name.startsWith("superops_custom_")) {
-      const domainTools = await loadDomain("custom");
-      return domainTools.handleCall(name, toolArgs);
+    const domains: Domain[] = ["clients", "tickets", "assets", "technicians", "custom"];
+    const domain = domains.find((candidate) => name.startsWith(`superops_${candidate}_`));
+    if (domain) {
+      const domainTools = await loadDomain(domain);
+      const result = await domainTools.handleCall(name, toolArgs);
+      if (result.isError) {
+        logToolFailure(name, result.content
+          .filter((item) => item.type === "text")
+          .map((item) => item.text)
+          .join("\n"));
+      }
+      return result;
     }
 
     // Unknown tool

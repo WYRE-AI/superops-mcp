@@ -94,6 +94,13 @@
 
 ### Fixed
 
+- **HTTP error bodies:** non-2xx SuperOps responses now include a truncated,
+  secret-scrubbed body and GraphQL `errors[].message` values, instead of only
+  `HTTP error: 400 Bad Request`.
+- **Tool failure logs:** domain and `superops_test_connection` failures write
+  one JSON line to stdout, without secrets, credentials, tool arguments, or
+  request headers.
+
 - **Every GraphQL operation was invalid against the SuperOps API.** All 16
   queries and mutations had been written against an invented schema, so no tool
   in this server could complete a call. `superops_clients_list` and

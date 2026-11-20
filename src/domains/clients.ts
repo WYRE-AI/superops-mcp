@@ -97,6 +97,111 @@ const SEARCH_CLIENTS_QUERY = `
   }
 `;
 
+const LIST_CLIENT_USERS_QUERY = `
+  query getClientUserList($input: GetClientUserListInput!) {
+    getClientUserList(input: $input) {
+      userList {
+        userId
+        firstName
+        lastName
+        name
+        email
+        contactNumber
+        role
+      }
+      listInfo {
+        page
+        pageSize
+        totalCount
+        hasMore
+      }
+    }
+  }
+`;
+
+const CREATE_CLIENT_USER_MUTATION = `
+  mutation createClientUser($input: CreateClientUserInput!) {
+    createClientUser(input: $input) {
+      userId
+      firstName
+      lastName
+      name
+      email
+      contactNumber
+      role
+    }
+  }
+`;
+
+const UPDATE_CLIENT_USER_MUTATION = `
+  mutation updateClientUser($input: UpdateClientUserInput!) {
+    updateClientUser(input: $input) {
+      userId
+      firstName
+      lastName
+      name
+      email
+      contactNumber
+      role
+    }
+  }
+`;
+
+const LIST_INVOICES_QUERY = `
+  query getInvoiceList($input: ListInfoInput!) {
+    getInvoiceList(input: $input) {
+      invoices {
+        invoiceId
+        displayId
+        client
+        invoiceDate
+        dueDate
+        statusEnum
+        totalAmount
+        amountDue
+        paymentDate
+      }
+      listInfo {
+        page
+        pageSize
+        totalCount
+        hasMore
+      }
+    }
+  }
+`;
+
+const GET_INVOICE_QUERY = `
+  query getInvoice($input: InvoiceIdentifierInput!) {
+    getInvoice(input: $input) {
+      invoiceId
+      displayId
+      client
+      billTo
+      invoiceDate
+      dueDate
+      statusEnum
+      sentToClient
+      items {
+        itemId
+        billedDate
+        details
+        quantity
+        unitPrice
+        amount
+        taxAmount
+        totalAmount
+      }
+      discountAmount
+      totalAmount
+      amountDue
+      notes
+      paymentDate
+      paymentReference
+    }
+  }
+`;
+
 interface ListClientsResponse {
   getClientList: {
     clients: Client[];
@@ -181,6 +286,81 @@ export function getClientsTools(): DomainTools {
             ...PAGE_PROPERTIES,
           },
           required: ["query"],
+        },
+      },
+      {
+        name: "superops_clients_list_users",
+        description:
+          "List client users (contacts, end users) in SuperOps.ai, optionally for one client. " +
+          "Check this before creating a user to avoid duplicates.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            clientId: {
+              type: "string",
+              description: "Only users of this client (accountId)",
+            },
+            ...PAGE_PROPERTIES,
+          },
+        },
+      },
+      {
+        name: "superops_clients_create_user",
+        description:
+          "Create a client user (contact) for onboarding a new end user. Needs firstName, email " +
+          "and a roleId (client roles are tenant configuration).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            firstName: { type: "string", description: "First name (required)" },
+            lastName: { type: "string" },
+            email: { type: "string", description: "Email address (required)" },
+            roleId: { type: "string", description: "Client user role ID (required)" },
+            clientId: { type: "string", description: "Client accountId to attach the user to" },
+            siteId: { type: "string", description: "Client site ID" },
+            contactNumber: { type: "string" },
+          },
+          required: ["firstName", "email", "roleId"],
+        },
+      },
+      {
+        name: "superops_clients_update_user",
+        description:
+          "Update a client user (contact): name, email, phone, site or role. Only the fields " +
+          "you pass change.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            userId: { type: "string", description: "Client user ID (required)" },
+            firstName: { type: "string" },
+            lastName: { type: "string" },
+            email: { type: "string" },
+            roleId: { type: "string" },
+            siteId: { type: "string" },
+            contactNumber: { type: "string" },
+          },
+          required: ["userId"],
+        },
+      },
+      {
+        name: "superops_clients_list_invoices",
+        description:
+          "List invoices (number, client, dates, status, total, amount due). Use it for billing " +
+          "follow-up. Results are paginated with page/pageSize.",
+        inputSchema: {
+          type: "object",
+          properties: { ...PAGE_PROPERTIES },
+        },
+      },
+      {
+        name: "superops_clients_get_invoice",
+        description: "Get one invoice by ID, including its line items, totals and payment state.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            invoiceId: { type: "string", description: "The invoice ID (required)" },
+          },
+          required: ["invoiceId"],
         },
       },
     ],
@@ -295,6 +475,125 @@ export function getClientsTools(): DomainTools {
                   text: JSON.stringify(response.getClientList, null, 2),
                 },
               ],
+            };
+          }
+
+          case "superops_clients_list_users": {
+            const params = args as { clientId?: string; page?: number; pageSize?: number };
+            const input: { listInfo: ListInfoInput; clientId?: string } = {
+              listInfo: { ...paging(params) },
+            };
+            if (params.clientId) input.clientId = params.clientId;
+            const response = await client.query<{
+              getClientUserList: { userList: unknown[]; listInfo: ListInfo };
+            }>(LIST_CLIENT_USERS_QUERY, { input });
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(response.getClientUserList, null, 2) },
+              ],
+            };
+          }
+
+          case "superops_clients_create_user": {
+            const params = args as {
+              firstName?: string;
+              lastName?: string;
+              email?: string;
+              roleId?: string;
+              clientId?: string;
+              siteId?: string;
+              contactNumber?: string;
+            };
+            if (!params.firstName || !params.email || !params.roleId) {
+              return {
+                content: [{ type: "text", text: "firstName, email and roleId are required" }],
+                isError: true,
+              };
+            }
+            const input: Record<string, unknown> = {
+              firstName: params.firstName,
+              email: params.email,
+              role: { roleId: params.roleId },
+            };
+            if (params.lastName) input.lastName = params.lastName;
+            if (params.contactNumber) input.contactNumber = params.contactNumber;
+            if (params.clientId) input.client = { accountId: params.clientId };
+            if (params.siteId) input.site = { id: params.siteId };
+            const response = await client.mutate<{ createClientUser: unknown }>(
+              CREATE_CLIENT_USER_MUTATION,
+              { input }
+            );
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(response.createClientUser, null, 2) },
+              ],
+            };
+          }
+
+          case "superops_clients_update_user": {
+            const params = args as {
+              userId?: string;
+              firstName?: string;
+              lastName?: string;
+              email?: string;
+              roleId?: string;
+              siteId?: string;
+              contactNumber?: string;
+            };
+            if (!params.userId) {
+              return {
+                content: [{ type: "text", text: "userId is required" }],
+                isError: true,
+              };
+            }
+            const input: Record<string, unknown> = { userId: params.userId };
+            if (params.firstName) input.firstName = params.firstName;
+            if (params.lastName) input.lastName = params.lastName;
+            if (params.email) input.email = params.email;
+            if (params.contactNumber) input.contactNumber = params.contactNumber;
+            if (params.roleId) input.role = { roleId: params.roleId };
+            if (params.siteId) input.site = { id: params.siteId };
+            if (Object.keys(input).length === 1) {
+              return {
+                content: [{ type: "text", text: "provide at least one field to update" }],
+                isError: true,
+              };
+            }
+            const response = await client.mutate<{ updateClientUser: unknown }>(
+              UPDATE_CLIENT_USER_MUTATION,
+              { input }
+            );
+            return {
+              content: [
+                { type: "text", text: JSON.stringify(response.updateClientUser, null, 2) },
+              ],
+            };
+          }
+
+          case "superops_clients_list_invoices": {
+            const params = args as { page?: number; pageSize?: number };
+            const input: ListInfoInput = { ...paging(params) };
+            const response = await client.query<{
+              getInvoiceList: { invoices: unknown[]; listInfo: ListInfo };
+            }>(LIST_INVOICES_QUERY, { input });
+            return {
+              content: [{ type: "text", text: JSON.stringify(response.getInvoiceList, null, 2) }],
+            };
+          }
+
+          case "superops_clients_get_invoice": {
+            const { invoiceId } = args as { invoiceId?: string };
+            if (!invoiceId) {
+              return {
+                content: [{ type: "text", text: "invoiceId is required" }],
+                isError: true,
+              };
+            }
+            const response = await client.query<{ getInvoice: unknown }>(GET_INVOICE_QUERY, {
+              input: { invoiceId },
+            });
+            return {
+              content: [{ type: "text", text: JSON.stringify(response.getInvoice, null, 2) }],
             };
           }
 

@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- **Job depth (WYREAI-702).** Five tools in the clients domain: `superops_clients_list_users`, `superops_clients_create_user`, `superops_clients_update_user`, `superops_clients_list_invoices`, `superops_clients_get_invoice`. Create and update accept a role, so Jev rates them admin. Not covered: backup_check (no backup surface in the SuperOps GraphQL schema) and patch_device actions (`runScriptOnAsset` is admin and needs its own review). Patch status reads already exist.
+
 ### Security
 
 - **Cross-tenant elicitation/confirmation misroute (gateway mode).** The

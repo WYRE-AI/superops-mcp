@@ -92,11 +92,16 @@ describe("Clients Domain", () => {
   describe("getClientsTools", () => {
     it("returns tools array with expected tools", () => {
       const domain = getClientsTools();
-      expect(domain.tools).toHaveLength(3);
+      expect(domain.tools).toHaveLength(8);
       expect(domain.tools.map((t) => t.name)).toEqual([
         "superops_clients_list",
         "superops_clients_get",
         "superops_clients_search",
+        "superops_clients_list_users",
+        "superops_clients_create_user",
+        "superops_clients_update_user",
+        "superops_clients_list_invoices",
+        "superops_clients_get_invoice",
       ]);
     });
 
@@ -535,6 +540,101 @@ describe("Clients Domain", () => {
           new RegExp(`${field}\\s*\\{`)
         );
       }
+    });
+  });
+
+  describe("job-depth tools (WYREAI-702)", () => {
+    const text = (r: { content: { text: string }[] }) => r.content[0].text;
+
+    it("lists client users with clientId and paging", async () => {
+      mockClient.query.mockResolvedValue({
+        getClientUserList: { userList: [], listInfo: { page: 2 } },
+      });
+      const result = await getClientsTools().handleCall("superops_clients_list_users", {
+        clientId: "c1",
+        page: 2,
+      });
+      expect(result.isError).toBeUndefined();
+      const vars = mockClient.query.mock.calls[0][1] as {
+        input: { clientId: string; listInfo: { page: number; pageSize: number } };
+      };
+      expect(vars.input.clientId).toBe("c1");
+      expect(vars.input.listInfo).toEqual({ page: 2, pageSize: 50 });
+    });
+
+    it("creates a client user with identifier objects", async () => {
+      mockClient.mutate.mockResolvedValue({ createClientUser: { userId: "u1" } });
+      const result = await getClientsTools().handleCall("superops_clients_create_user", {
+        firstName: "New",
+        email: "new.user@example.com",
+        roleId: "r1",
+        clientId: "c1",
+        siteId: "s1",
+      });
+      expect(result.isError).toBeUndefined();
+      expect(text(result)).toContain("u1");
+      expect(mockClient.mutate.mock.calls[0][1]).toEqual({
+        input: {
+          firstName: "New",
+          email: "new.user@example.com",
+          role: { roleId: "r1" },
+          client: { accountId: "c1" },
+          site: { id: "s1" },
+        },
+      });
+    });
+
+    it("rejects create_user without required fields", async () => {
+      const result = await getClientsTools().handleCall("superops_clients_create_user", {
+        firstName: "New",
+      });
+      expect(result.isError).toBe(true);
+      expect(mockClient.mutate).not.toHaveBeenCalled();
+    });
+
+    it("updates only the fields passed", async () => {
+      mockClient.mutate.mockResolvedValue({ updateClientUser: { userId: "u1" } });
+      await getClientsTools().handleCall("superops_clients_update_user", {
+        userId: "u1",
+        contactNumber: "555-0100",
+      });
+      expect(mockClient.mutate.mock.calls[0][1]).toEqual({
+        input: { userId: "u1", contactNumber: "555-0100" },
+      });
+    });
+
+    it("rejects update_user with no changes or no id", async () => {
+      const a = await getClientsTools().handleCall("superops_clients_update_user", {
+        userId: "u1",
+      });
+      const b = await getClientsTools().handleCall("superops_clients_update_user", {});
+      expect(a.isError).toBe(true);
+      expect(b.isError).toBe(true);
+      expect(mockClient.mutate).not.toHaveBeenCalled();
+    });
+
+    it("lists invoices with normalised paging", async () => {
+      mockClient.query.mockResolvedValue({
+        getInvoiceList: { invoices: [{ invoiceId: "i1" }], listInfo: { page: 1 } },
+      });
+      const result = await getClientsTools().handleCall("superops_clients_list_invoices", {
+        pageSize: 500,
+      });
+      expect(text(result)).toContain("i1");
+      expect(mockClient.query.mock.calls[0][1]).toEqual({
+        input: { page: 1, pageSize: 100 },
+      });
+    });
+
+    it("gets an invoice by id and requires the id", async () => {
+      mockClient.query.mockResolvedValue({ getInvoice: { invoiceId: "i1" } });
+      const ok = await getClientsTools().handleCall("superops_clients_get_invoice", {
+        invoiceId: "i1",
+      });
+      expect(ok.isError).toBeUndefined();
+      expect(mockClient.query.mock.calls[0][1]).toEqual({ input: { invoiceId: "i1" } });
+      const bad = await getClientsTools().handleCall("superops_clients_get_invoice", {});
+      expect(bad.isError).toBe(true);
     });
   });
 });

@@ -127,3 +127,49 @@ describe("issue #73: unresolved MCPB config placeholders", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("HTTP error details", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const client = new SuperOpsClient({ apiToken: "fictional-credential", subdomain: "fictional-tenant" });
+
+  it("includes GraphQL reasons and caps long details", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      errors: [{ message: "some vendor reason" }, { message: "x".repeat(3000) }],
+    }), { status: 400, statusText: "Bad Request" })));
+    const error = await client.query<never>("query { example }").catch((error: Error) => error);
+    expect(error.message).toContain("HTTP error: 400 Bad Request");
+    expect(error.message).toContain("some vendor reason");
+    expect(error.message.length).toBeLessThan(1100);
+  });
+
+  it("caps a long plain-text body at 500 characters", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("vendor reason " + "x".repeat(3000), {
+      status: 400, statusText: "Bad Request",
+    })));
+    const error = await client.query<never>("query { example }").catch((error: Error) => error);
+    expect(error.message).toContain("Body: vendor reason");
+    expect(error.message).toMatch(/\.\.\.$/);
+    expect(error.message.length).toBeLessThan(550);
+  });
+
+  it("scrubs GraphQL messages, body fields and echoed credentials", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      errors: [{ message: "Denied Bearer fictional-bearer-value" }],
+      apiKey: "super-secret-value",
+      echo: "fictional-credential fictional-tenant",
+    }), { status: 400 })));
+    const error = await client.mutate<never>("mutation { example }").catch((error: Error) => error);
+    for (const value of ["fictional-bearer-value", "super-secret-value", "fictional-credential", "fictional-tenant"]) {
+      expect(error.message).not.toContain(value);
+    }
+  });
+
+  it("preserves the status when reading the body fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: false, status: 400, statusText: "Bad Request",
+      text: vi.fn().mockRejectedValue(new Error("stream unavailable")),
+    }));
+    await expect(client.query("query { example }")).rejects.toThrow("HTTP error: 400 Bad Request");
+  });
+});

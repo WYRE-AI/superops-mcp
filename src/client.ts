@@ -4,6 +4,7 @@
  * Lazy-loaded client for making GraphQL requests to the SuperOps.ai API.
  */
 
+import { formatHttpError } from "./http-error.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { SuperOpsCredentials, GraphQLResponse, GraphQLError } from "./types.js";
 
@@ -77,7 +78,15 @@ export class SuperOpsClient {
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status} ${response.statusText}`);
+      let body = "";
+      try {
+        body = await response.text();
+      } catch {
+        // Preserve the HTTP status even when the response stream cannot be read.
+      }
+      throw new Error(formatHttpError(
+        response.status, response.statusText, body, [this.apiToken, this.subdomain]
+      ));
     }
 
     const result = (await response.json()) as GraphQLResponse<T>;

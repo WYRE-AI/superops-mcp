@@ -273,6 +273,10 @@ against it on each `npm test`, so a query referencing a field SuperOps does not
 define fails in CI rather than at runtime. Regenerate the schema after a
 SuperOps API change and re-run the tests.
 
+## Errors and logging
+
+Non-2xx SuperOps responses include a secret-scrubbed, truncated (~500 character) response body and any GraphQL `errors[].message` values in the tool error. Tool failures are logged as a single JSON line to stdout, without credentials, tool arguments, or request headers.
+
 ## License
 
 Apache-2.0

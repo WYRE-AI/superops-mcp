@@ -21,7 +21,7 @@ MCP server for Claude that provides tools to interact with the SuperOps.ai PSA/R
 
 ## Features
 
-- **Decision Tree Architecture**: Navigate to domains (clients, tickets, assets, technicians) to see relevant tools
+- **Tool discovery**: Call tools directly or use `superops_navigate` to browse tools by domain
 - **Lazy Loading**: Domain modules load on-demand for faster startup
 - **Full CRUD Operations**: List, get, create, and update entities
 - **GraphQL Support**: Use custom queries for advanced operations
@@ -126,8 +126,8 @@ Add to your `claude_desktop_config.json`:
 
 ### Navigation
 
-- `superops_navigate` - Navigate to a domain
-- `superops_back` - Return to main menu
+- `superops_navigate` - Show the tools in a domain
+- `superops_status` - Show credential configuration status and available domains
 - `superops_test_connection` - Test API connectivity
 
 ### Clients Domain
@@ -135,6 +135,11 @@ Add to your `claude_desktop_config.json`:
 - `superops_clients_list` - List clients with filters
 - `superops_clients_get` - Get client details
 - `superops_clients_search` - Search clients by name
+- `superops_clients_list_users` - List contacts. Pass a client's account ID as `clientId` to limit the results to that client.
+- `superops_clients_create_user` - Create a contact with `firstName`, `email`, and a client user `roleId`.
+- `superops_clients_update_user` - Update a contact by `userId`. Supply the fields to change.
+- `superops_clients_list_invoices` - List invoices using `page` and `pageSize`.
+- `superops_clients_get_invoice` - Read one invoice by `invoiceId`.
 
 ### Tickets Domain
 
@@ -166,16 +171,12 @@ Add to your `claude_desktop_config.json`:
 ## Example Usage
 
 ```
-User: What tools are available?
-Claude: Use superops_navigate to select a domain...
+User: Show me the first ten invoices.
+Claude: [calls superops_clients_list_invoices with {"page": 1, "pageSize": 10}]
 
-User: Navigate to tickets
-Claude: [calls superops_navigate with domain: "tickets"]
-Now in tickets domain. Available tools: superops_tickets_list, superops_tickets_get...
-
-User: Show open high priority tickets
-Claude: [calls superops_tickets_list with status: ["Open"], priority: ["High"]]
-Here are the open high priority tickets...
+User: Open the first invoice.
+Claude: [takes invoiceId from the first entry in invoices and calls
+         superops_clients_get_invoice with that ID, e.g. {"invoiceId": "i1"}]
 ```
 
 ## Docker

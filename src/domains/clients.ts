@@ -281,7 +281,8 @@ export function getClientsTools(): DomainTools {
           properties: {
             query: {
               type: "string",
-              description: "Substring to match against the client name or any of its email domains",
+              pattern: "\\S",
+              description: "Nonblank substring to match against the client name or any of its email domains",
             },
             ...PAGE_PROPERTIES,
           },
@@ -456,7 +457,13 @@ export function getClientsTools(): DomainTools {
           }
 
           case "superops_clients_search": {
-            const params = args as { query: string; page?: number; pageSize?: number };
+            const params = args as { query?: unknown; page?: number; pageSize?: number };
+            if (typeof params.query !== "string" || !params.query.trim()) {
+              return {
+                content: [{ type: "text", text: "Provide a nonblank query to search for clients." }],
+                isError: true,
+              };
+            }
 
             const input: ListInfoInput = {
               ...paging(params),

@@ -394,7 +394,18 @@ describe("Clients Domain", () => {
       expect(tool?.inputSchema.required).toContain("query");
     });
 
-    it("constructs a single name/contains condition", async () => {
+    it.each([{}, { query: "" }, { query: "   " }, { query: 42 }])(
+      "rejects an unusable search term before querying SuperOps: %j",
+      async (args) => {
+        mockClient.query.mockResolvedValue(listResponse());
+        const result = await getClientsTools().handleCall("superops_clients_search", args);
+        expect(mockClient.query).not.toHaveBeenCalled();
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain("query");
+      }
+    );
+
+    it("matches the supplied term against the client name and email domains", async () => {
       mockClient.query.mockResolvedValue(listResponse([{ accountId: "1", name: "Acme Corp" }]));
 
       const domain = getClientsTools();

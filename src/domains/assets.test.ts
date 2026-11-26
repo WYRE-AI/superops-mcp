@@ -512,6 +512,26 @@ describe("Assets Domain", () => {
   });
 
   describe("Error handling", () => {
+    it.each([
+      "superops_assets_list",
+      "superops_assets_get",
+      "superops_assets_software",
+      "superops_assets_patches",
+    ])("returns a readable tool error when the result field is missing for %s", async (tool) => {
+      mockClient.query.mockResolvedValue({ unrelated: "fixture-body-marker" });
+      const result = await getAssetsTools().handleCall(tool, { assetId: "fixture-id" });
+      expect(result).toEqual({
+        isError: true,
+        content: [{ type: "text", text: "SuperOps omitted the requested asset result." }],
+      });
+    });
+
+    it("preserves an explicit null asset lookup", async () => {
+      mockClient.query.mockResolvedValue({ getAsset: null });
+      const result = await getAssetsTools().handleCall("superops_assets_get", { assetId: "fixture-id" });
+      expect(result).toEqual({ content: [{ type: "text", text: "null" }] });
+    });
+
     it("returns error for unknown tool", async () => {
       const domain = getAssetsTools();
       const result = await domain.handleCall("unknown_tool", {});

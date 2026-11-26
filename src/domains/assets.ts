@@ -177,6 +177,16 @@ interface GetPatchesResponse {
   };
 }
 
+function assetResult(value: unknown) {
+  if (value === undefined) {
+    return {
+      content: [{ type: "text", text: "SuperOps omitted the requested asset result." }],
+      isError: true,
+    };
+  }
+  return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
+}
+
 export function getAssetsTools(): DomainTools {
   return {
     tools: [
@@ -322,14 +332,7 @@ export function getAssetsTools(): DomainTools {
               },
             });
 
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(response.getAssetList, null, 2),
-                },
-              ],
-            };
+            return assetResult(response.getAssetList);
           }
 
           case "superops_assets_get": {
@@ -339,14 +342,7 @@ export function getAssetsTools(): DomainTools {
               input: { assetId },
             });
 
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(response.getAsset, null, 2),
-                },
-              ],
-            };
+            return assetResult(response.getAsset);
           }
 
           case "superops_assets_software": {
@@ -373,14 +369,7 @@ export function getAssetsTools(): DomainTools {
               },
             });
 
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(response.getAssetSoftwareList, null, 2),
-                },
-              ],
-            };
+            return assetResult(response.getAssetSoftwareList);
           }
 
           case "superops_assets_patches": {
@@ -411,14 +400,7 @@ export function getAssetsTools(): DomainTools {
               },
             });
 
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(response.getAssetPatchDetails, null, 2),
-                },
-              ],
-            };
+            return assetResult(response.getAssetPatchDetails);
           }
 
           default:
